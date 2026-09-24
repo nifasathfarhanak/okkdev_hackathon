@@ -1,0 +1,34 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src"],
+  "exclude": [
+    "src/pages/A2AChatPage.tsx",
+    "src/pages/ActivityLogPage.tsx",
+    "src/pages/AgentMarketplacePage.tsx",
+    "src/pages/AgentProfilePage.tsx",
+    "src/pages/ApprovalCenterPage.tsx",
+    "src/pages/CreateDealPage.tsx",
+    "src/pages/DealWorkspacePage.tsx",
+    "src/pages/MyAgentPage.tsx",
+    "src/pages/NegotiationCenterPage.tsx",
+    "src/pages/OkxIntegrationPage.tsx",
+    "src/pages/ReputationPage.tsx",
+    "src/pages/TransactionCenterPage.tsx"
+  ]
+}

@@ -1,0 +1,390 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  name          String
+  role          String   @default("BUYER")
+  company       String?
+  walletAddress String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  intents       Intent[]
+  approvals     Approval[]
+  notifications Notification[]
+  agents        Agent[]
+  apiKeys       ApiKey[]
+}
+
+model Agent {
+  id                 String   @id @default(uuid())
+  name               String
+  description        String
+  type               String   // SUPPLIER, LOGISTICS, PAYMENT, DATA, SERVICE, ANALYSIS, REVIEWER
+  industry           String   @default("General")
+  ownerId            String?
+  endpoint           String   // A2A endpoint URL
+  protocol           String   @default("OKX-A2A/1.0")
+  status             String   @default("ACTIVE") // ACTIVE, BUSY, OFFLINE
+  verificationStatus String   @default("VERIFIED") // VERIFIED, PLATFORM_OBSERVED, DEMO
+  pricingModel       String   @default("PER_TRANSACTION")
+  supportedPayments  String   @default("USDC,USDT,OKB")
+  avgResponseTimeMs  Int      @default(320)
+  historicalReliability Float @default(94.5)
+  avgFulfillmentDays Float   @default(7.2)
+  isAutonomous       Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  owner              User?             @relation(fields: [ownerId], references: [id])
+  capabilities       AgentCapability[]
+  plans              Plan[]
+  executions         Execution[]
+}
+
+model AgentCapability {
+  id          String   @id @default(uuid())
+  agentId     String
+  name        String
+  category    String
+  description String
+  parameters  String   // JSON schema of input/output
+  createdAt   DateTime @default(now())
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+}
+
+model Intent {
+  id              String   @id @default(uuid())
+  userId          String?
+  title           String
+  description     String
+  productCategory String   @default("Laboratory Equipment")
+  quantity        Int      @default(100)
+  budget          Float    @default(10000.0)
+  currency        String   @default("USDC")
+  deadlineDays    Int      @default(14)
+  targetSpecs     String?  // JSON string
+  status          String   @default("CREATED") // CREATED, PLANNING, SIMULATING, CHALLENGING, COMPARING, DECISION_READY, AWAITING_APPROVAL, APPROVED, EXECUTING, COMPLETED, FAILED
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User?             @relation(fields: [userId], references: [id])
+  plans           Plan[]
+  simulations     Simulation[]
+  approvals       Approval[]
+  executions      Execution[]
+  actualOutcome   ActualOutcome?
+  calibration     Calibration?
+  activityLogs    ActivityLog[]
+}
+
+model Plan {
+  id                  String   @id @default(uuid())
+  intentId            String
+  agentId             String?
+  planKey             String   // PLAN_A, PLAN_B, PLAN_C, PLAN_D
+  name                String
+  description         String
+  strategy            String   // SINGLE_SOURCE, DUAL_SOURCE, NEGOTIATED, EXPEDITED
+  costAmount          Float
+  currency            String   @default("USDC")
+  expectedDeliveryDays Int
+  coordinationComplexity String @default("LOW") // LOW, MEDIUM, HIGH
+  baseSuccessRate     Float    @default(80.0)
+  assumptionsJson     String   // JSON array of strings
+  candidateSuppliers  String   // JSON array of agent IDs/names
+  status              String   @default("PROPOSED") // PROPOSED, SIMULATED, CHALLENGED, SELECTED, REJECTED
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  intent              Intent            @relation(fields: [intentId], references: [id], onDelete: Cascade)
+  agent               Agent?            @relation(fields: [agentId], references: [id])
+  simulationRuns      SimulationRun[]
+  counterChallenges   CounterChallenge[]
+  executions          Execution[]
+}
+
+model Simulation {
+  id              String   @id @default(uuid())
+  intentId        String
+  simulationCode  String   @unique // AM-00182
+  status          String   @default("COMPLETED") // QUEUED, RUNNING, COMPLETED, FAILED
+  iterations      Int      @default(4000)
+  seed            Int      @default(4289)
+  assumptionsJson String   // JSON of input assumptions
+  variablesJson   String   // JSON of variable distributions
+  scenarioSummary String?  // JSON of aggregated scenario outcomes
+  preferredPlanKey String? // PLAN_B
+  preferenceReason String?
+  createdAt       DateTime @default(now())
+  completedAt     DateTime?
+
+  intent          Intent             @relation(fields: [intentId], references: [id], onDelete: Cascade)
+  simulationRuns  SimulationRun[]
+  scenarios       Scenario[]
+  decisionBrief   DecisionBrief?
+  counterChallenges CounterChallenge[]
+}
+
+model SimulationRun {
+  id           String   @id @default(uuid())
+  simulationId String
+  planId       String
+  runNumber    Int
+  scenarioType String   // BASELINE, OPTIMISTIC, PESSIMISTIC, DELAY, PRICE_CHANGE, SUPPLIER_FAILURE, CAPACITY_SHORTAGE, PAYMENT_FAILURE, LOGISTICS_FAILURE, NEGOTIATION_FAILURE, COMBINED_FAILURE
+  costOutcome  Float
+  deliveryDays Int
+  isSuccess    Boolean
+  failureReason String?
+  logisticsDelayDays Int @default(0)
+  priceVariancePct Float @default(0.0)
+  createdAt    DateTime @default(now())
+
+  simulation   Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+  plan         Plan       @relation(fields: [planId], references: [id], onDelete: Cascade)
+}
+
+model SimulationVariable {
+  id           String   @id @default(uuid())
+  name         String   // supplierDelayProb, priceVolatility, logisticsReliability, negotiationSuccessRate
+  label        String
+  currentVal   Float
+  minVal       Float
+  maxVal       Float
+  unit         String   @default("%")
+  description  String
+}
+
+model Scenario {
+  id           String   @id @default(uuid())
+  simulationId String
+  scenarioType String
+  name         String
+  probability  Float    // modeled scenario weight
+  runsCount    Int
+  successCount Int
+  delayCount   Int
+  failureCount Int
+  avgCost      Float
+  avgDelivery  Float
+  summary      String
+
+  simulation   Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+  outcomes     ScenarioOutcome[]
+}
+
+model ScenarioOutcome {
+  id           String   @id @default(uuid())
+  scenarioId   String
+  planKey      String
+  successRate  Float
+  medianCost   Float
+  p10Days      Int
+  p50Days      Int
+  p90Days      Int
+  downsideRisk Float
+
+  scenario     Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+}
+
+model CounterChallenge {
+  id              String   @id @default(uuid())
+  simulationId    String
+  planId          String
+  challengeNumber Int      @default(1)
+  title           String
+  assumption      String   // e.g. "Supplier C capacity will fulfill 100 units without delay"
+  severity        String   // LOW, MEDIUM, HIGH, CRITICAL
+  evidence        String
+  stressTestName  String   // "Reduce supplier capacity by 20%"
+  stressTestDelta String   // "Simulated delay rises from 11% to 41%"
+  mitigation      String   // "Split order across two suppliers (Plan D)"
+  status          String   @default("DISCOVERED") // DISCOVERED, STRESS_TESTED, MITIGATED, ACCEPTED
+  createdAt       DateTime @default(now())
+
+  simulation      Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+  plan            Plan       @relation(fields: [planId], references: [id], onDelete: Cascade)
+}
+
+model DecisionBrief {
+  id                    String   @id @default(uuid())
+  simulationId          String   @unique
+  intentSummary         String
+  proposedAction        String
+  alternativesEvaluated Int      @default(4)
+  simulationSummary     String
+  counterChallengesJson String   // JSON array of adversarial challenges
+  keyAssumptionsJson    String   // JSON array of model assumptions
+  tradeOffsJson         String   // JSON structured trade-offs
+  failureModesJson      String   // JSON of failure modes
+  mitigationsJson       String   // JSON of mitigations
+  recommendedPlanKey    String   // e.g. PLAN_B
+  recommendedPlanName   String
+  reasoning             String
+  costScore             Float    @default(88.0)
+  speedScore            Float    @default(94.0)
+  reliabilityScore      Float    @default(91.0)
+  complexityScore       Float    @default(85.0)
+  downsideScore         Float    @default(89.0)
+  overallScore          Float    @default(90.2)
+  requiresHumanApproval Boolean  @default(true)
+  createdAt             DateTime @default(now())
+
+  simulation            Simulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+}
+
+model Approval {
+  id              String   @id @default(uuid())
+  intentId        String
+  userId          String?
+  selectedPlanKey String   // PLAN_B
+  approvedAmount  Float
+  currency        String   @default("USDC")
+  status          String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  decisionNotes   String?
+  policyChecksJson String? // JSON check results
+  requestedAt     DateTime @default(now())
+  decidedAt       DateTime?
+
+  intent          Intent   @relation(fields: [intentId], references: [id], onDelete: Cascade)
+  user            User?    @relation(fields: [userId], references: [id])
+}
+
+model Execution {
+  id               String   @id @default(uuid())
+  intentId         String
+  planId           String?
+  agentId          String?
+  amount           Float
+  currency         String   @default("USDC")
+  status           String   @default("COMPLETED") // PENDING, PROCESSING, COMPLETED, FAILED
+  network          String   @default("OKX X Layer Testnet")
+  txHash           String?
+  explorerUrl      String?
+  isDemo           Boolean  @default(true)
+  executionAdapter String   @default("OKX_AGENTIC_WALLET_DEMO")
+  recipientAddress String   @default("0x742d35Cc6634C0532925a3b844Bc454e4438f44e")
+  contractAddress  String   @default("0x3f5CE5FBFe3E9af3971dD833D26bA9b5C936f0bE")
+  gasUsed          String   @default("0.0021 OKB")
+  escrowStatus     String   @default("FUNDS_HELD_IN_ESCROW")
+  executedAt       DateTime @default(now())
+
+  intent           Intent   @relation(fields: [intentId], references: [id], onDelete: Cascade)
+  plan             Plan?    @relation(fields: [planId], references: [id])
+  agent            Agent?   @relation(fields: [agentId], references: [id])
+}
+
+model ActualOutcome {
+  id                  String   @id @default(uuid())
+  intentId            String   @unique
+  actualCost          Float
+  actualDeliveryDays  Int
+  actualStatus        String   // SUCCESSFUL, DELAYED, FAILED
+  notes               String
+  observedVarianceCost Float   // actualCost - simulatedMedianCost
+  observedVarianceDays Int     // actualDays - simulatedMedianDays
+  recordedAt          DateTime @default(now())
+
+  intent              Intent   @relation(fields: [intentId], references: [id], onDelete: Cascade)
+}
+
+model Calibration {
+  id                   String   @id @default(uuid())
+  intentId             String   @unique
+  predictedCostMedian  Float
+  predictedDeliveryP50 Int
+  predictedSuccessPct  Float
+  actualCost           Float
+  actualDeliveryDays   Int
+  calibrationAccuracy  String   // "HIGH_ACCURACY", "CLOSE_PREDICTION", "MILD_UNDERESTIMATE"
+  calibrationDeltaNote String
+  calibrationMultiplier Float   @default(1.0)
+  updatedAt            DateTime @default(now())
+
+  intent               Intent   @relation(fields: [intentId], references: [id], onDelete: Cascade)
+}
+
+model ActivityLog {
+  id         String   @id @default(uuid())
+  intentId   String?
+  actorType  String   // PRIMARY_AGENT, COUNTER_AGENT, SIMULATION_ENGINE, HUMAN_USER, OKX_SERVICE
+  actorName  String
+  action     String   // INTENT_CREATED, PLAN_GENERATED, SIMULATION_STARTED, CHALLENGE_DISCOVERED, STRESS_TESTED, DECISION_GENERATED, APPROVAL_GRANTED, EXECUTION_COMPLETED, CALIBRATION_UPDATED
+  result     String
+  details    String?  // JSON formatted details
+  requestId  String   @default("REQ-AM-001")
+  timestamp  DateTime @default(now())
+
+  intent     Intent?  @relation(fields: [intentId], references: [id], onDelete: SetNull)
+}
+
+model Integration {
+  id               String   @id @default(uuid())
+  name             String   @unique // OKX_AI, OKX_A2A, OKX_PAYMENT, AGENTIC_WALLET, XLAYER
+  serviceName      String
+  endpoint         String
+  connectionStatus String   @default("DEMO") // CONNECTED, DEMO, DISCONNECTED
+  lastHeartbeat    DateTime @default(now())
+  requestsHandled  Int      @default(0)
+  environment      String   @default("Sandbox / Testnet")
+  network          String   @default("OKX X Layer Sepolia")
+  configJson       String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model A2ASession {
+  id               String   @id @default(uuid())
+  sessionKey       String   @unique
+  initiatorAgentId String
+  targetAgentId    String
+  protocolVersion  String   @default("OKX-A2A/1.0")
+  status           String   @default("ACTIVE")
+  lastMessageJson  String?
+  createdAt        DateTime @default(now())
+  expiresAt        DateTime
+}
+
+model ApiKey {
+  id          String   @id @default(uuid())
+  userId      String
+  name        String
+  keyHash     String   @unique
+  keyPrefix   String   // e.g. "am_live_9a8b..."
+  permissions String   @default("SIMULATE,CHALLENGE,DECIDE,EXECUTE")
+  lastUsedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model WebhookEvent {
+  id        String   @id @default(uuid())
+  eventType String
+  source    String
+  payload   String
+  status    String   @default("DELIVERED")
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  message   String
+  type      String   @default("INFO") // INFO, APPROVAL_NEEDED, SIMULATION_COMPLETED, ALERT
+  isRead    Boolean  @default(false)
+  linkUrl   String?
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

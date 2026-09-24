@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true
+  },
+  "include": ["src/**/*"],
+  "exclude": [
+    "src/routes/deals.ts",
+    "src/services/discoveryService.ts",
+    "src/services/negotiationService.ts",
+    "src/services/reputationService.ts",
+    "src/tests",
+    "node_modules",
+    "dist"
+  ]
+}

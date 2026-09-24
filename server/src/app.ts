@@ -1,5 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
+import path from 'path';
+import fs from 'fs';
 import { mirrorRouter } from './routes/mirror';
 import { agentsRouter } from './routes/agents';
 import { a2aRouter } from './routes/a2a';
@@ -70,6 +72,44 @@ app.get('/api/health', (req: Request, res: Response) => {
     timestamp: new Date().toISOString()
   });
 });
+
+// Serve frontend static files if client/dist is built
+const clientDistPath = path.resolve(__dirname, '../../client/dist');
+const altClientDistPath = path.resolve(__dirname, '../client/dist');
+
+const activeStaticPath = fs.existsSync(clientDistPath)
+  ? clientDistPath
+  : fs.existsSync(altClientDistPath)
+  ? altClientDistPath
+  : null;
+
+if (activeStaticPath) {
+  app.use(express.static(activeStaticPath));
+  app.get('*', (req: Request, res: Response, next: NextFunction) => {
+    if (req.path.startsWith('/api') || req.path === '/health' || req.path === '/ready') {
+      return next();
+    }
+    res.sendFile(path.join(activeStaticPath, 'index.html'));
+  });
+} else {
+  app.get('/', (req: Request, res: Response) => {
+    res.json({
+      name: 'AgentMirror API Engine',
+      tagline: 'Before your agent acts, see what could happen.',
+      status: 'ONLINE',
+      hackathon: 'OKX Dev Day 2026',
+      track: 'Build a Company',
+      endpoints: {
+        health: '/health',
+        events: '/api/events',
+        simulate: '/api/mirror/simulate',
+        agents: '/api/agents',
+        activity: '/api/activity',
+        stats: '/api/stats'
+      }
+    });
+  });
+}
 
 // Global Error Handler
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {

@@ -6,6 +6,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.app = void 0;
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
+const path_1 = __importDefault(require("path"));
+const fs_1 = __importDefault(require("fs"));
 const mirror_1 = require("./routes/mirror");
 const agents_1 = require("./routes/agents");
 const a2a_1 = require("./routes/a2a");
@@ -68,6 +70,42 @@ exports.app.get('/api/health', (req, res) => {
         timestamp: new Date().toISOString()
     });
 });
+// Serve frontend static files if client/dist is built
+const clientDistPath = path_1.default.resolve(__dirname, '../../client/dist');
+const altClientDistPath = path_1.default.resolve(__dirname, '../client/dist');
+const activeStaticPath = fs_1.default.existsSync(clientDistPath)
+    ? clientDistPath
+    : fs_1.default.existsSync(altClientDistPath)
+        ? altClientDistPath
+        : null;
+if (activeStaticPath) {
+    exports.app.use(express_1.default.static(activeStaticPath));
+    exports.app.get('*', (req, res, next) => {
+        if (req.path.startsWith('/api') || req.path === '/health' || req.path === '/ready') {
+            return next();
+        }
+        res.sendFile(path_1.default.join(activeStaticPath, 'index.html'));
+    });
+}
+else {
+    exports.app.get('/', (req, res) => {
+        res.json({
+            name: 'AgentMirror API Engine',
+            tagline: 'Before your agent acts, see what could happen.',
+            status: 'ONLINE',
+            hackathon: 'OKX Dev Day 2026',
+            track: 'Build a Company',
+            endpoints: {
+                health: '/health',
+                events: '/api/events',
+                simulate: '/api/mirror/simulate',
+                agents: '/api/agents',
+                activity: '/api/activity',
+                stats: '/api/stats'
+            }
+        });
+    });
+}
 // Global Error Handler
 exports.app.use((err, req, res, next) => {
     console.error('API Error:', err);

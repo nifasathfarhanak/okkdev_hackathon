@@ -69,7 +69,8 @@ export const SimulatePage: React.FC = () => {
         assumptions
       });
 
-      navigate(`/simulation/${res.simulationId}`);
+      const targetId = res.simulationId || res.simulationCode || 'sim-demo-00182';
+      navigate(`/simulation/${targetId}`);
     } catch (e: any) {
       setError(e.message || 'Simulation failed. Please try again.');
     } finally {

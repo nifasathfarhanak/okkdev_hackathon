@@ -1,15 +1,30 @@
-const BASE = import.meta.env.VITE_API_URL || '';
+let envUrl = (import.meta.env.VITE_API_URL || '').trim();
+if (envUrl && !envUrl.startsWith('http://') && !envUrl.startsWith('https://')) {
+  envUrl = `https://${envUrl}`;
+}
+if (envUrl.endsWith('/')) {
+  envUrl = envUrl.slice(0, -1);
+}
+const BASE = envUrl;
 
 async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...((opts.headers as any) || {}) },
-    ...opts
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || `HTTP ${res.status}`);
+  const url = `${BASE}${path}`;
+  try {
+    const res = await fetch(url, {
+      headers: { 'Content-Type': 'application/json', ...((opts.headers as any) || {}) },
+      ...opts
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    return res.json();
+  } catch (err: any) {
+    if (err.name === 'TypeError' && err.message === 'Failed to fetch') {
+      throw new Error(`Unable to connect to API at ${url}. Please try a hard refresh (Cmd+Shift+R / Ctrl+F5).`);
+    }
+    throw err;
   }
-  return res.json();
 }
 
 // ─── Mirror / AgentMirror Core API ─────────────────────────────────────────
